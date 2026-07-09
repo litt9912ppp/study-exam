@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 錯題教練</title>
+<script>
+/* ================= CONFIG — edit these 5 lines ================= */
+const DIFY_URL      = "PASTE_YOUR_DIFY_WEBAPP_URL";   // e.g. https://udify.app/chat/xxxx
+const STUDENT       = "A";                             // A = 學測, B = 會考
+const API_URL       = "PASTE_APPS_SCRIPT_EXEC_URL";    // same /exec URL as the chatflow
+const SESSION_TOKEN = "PASTE_SESSION_TOKEN";           // low-privilege token (Apps Script v2 CONFIG)
+const STUDENT_NAME  = "同學";
+/* ====== THEMES: swap any group = edit one line (name, emoji, colors[bg1,bg2,accent], deco emojis) ====== */
+const THEMES = [
+ {n:"BTS",              e:"💜", c:["#2b1d4e","#5b3ba5","#a385ff"], d:["💜","🐋","✨"]},
+ {n:"SEVENTEEN",        e:"💎", c:["#1d3557","#f4a7b9","#8ecae6"], d:["💎","🌹","🎀"]},
+ {n:"Stray Kids",       e:"🐺", c:["#1a1a1a","#8b0000","#ff4d4d"], d:["🐺","⚡","🧭"]},
+ {n:"TXT",              e:"✨", c:["#12263a","#3a7ca5","#9ad1f5"], d:["✨","🌙","🪄"]},
+ {n:"ENHYPEN",          e:"🧛", c:["#14060e","#5e1224","#e3455f"], d:["🦇","🌙","🔗"]},
+ {n:"NCT DREAM",        e:"💚", c:["#0f2e1d","#2f9e44","#b2f2bb"], d:["💚","🐹","🎈"]},
+ {n:"EXO",              e:"⭐", c:["#22223b","#4a4e69","#c9ada7"], d:["⭐","🌌","🐺"]},
+ {n:"ATEEZ",            e:"🏴‍☠️", c:["#001219","#005f73","#94d2bd"], d:["⚓","🏴‍☠️","🌊"]},
+ {n:"RIIZE",            e:"🌅", c:["#3d1d0a","#c05b1f","#ffb15e"], d:["🌅","🍊","⚡"]},
+ {n:"BOYNEXTDOOR",      e:"🚪", c:["#243010","#87986a","#f5e960"], d:["🚪","🌼","🛹"]},
+ {n:"BLACKPINK",        e:"🖤", c:["#0d0d0d","#e75480","#ffb3cb"], d:["🖤","💗","👑"]},
+ {n:"NewJeans",         e:"🐰", c:["#1b2a4a","#4d74c4","#cdd9f0"], d:["🐰","👖","🎧"]},
+ {n:"IVE",              e:"🎀", c:["#3b0a2a","#c9184a","#ffb3c6"], d:["🎀","🌹","💌"]},
+ {n:"aespa",            e:"🦋", c:["#0a0a1a","#5f0f9f","#33e1ed"], d:["🦋","💠","🤖"]},
+ {n:"LE SSERAFIM",      e:"🔥", c:["#04123d","#1f4ce0","#bfd0ff"], d:["🔥","🦋","🗡️"]}
+];
+/* ====== MUSIC: files you place in the music/ folder of this repo (see Build Guide v2 Step 9.3) ====== */
+const PLAYLIST = [
+ ["巴哈 G弦之歌",        "music/01_bach_air.mp3"],
+ ["巴哈 郭德堡變奏曲主題","music/02_bach_goldberg_aria.mp3"],
+ ["貝多芬 月光奏鳴曲",    "music/03_beethoven_moonlight.mp3"],
+ ["蕭邦 夜曲 Op.9-2",     "music/04_chopin_nocturne.mp3"],
+ ["德布西 月光",          "music/05_debussy_clair_de_lune.mp3"],
+ ["薩提 Gymnopédie No.1", "music/06_satie_gymnopedie1.mp3"],
+ ["莫札特 K.545",         "music/07_mozart_k545.mp3"],
+ ["帕海貝爾 卡農",        "music/08_pachelbel_canon.mp3"]
+];
+</script>
+<style>
+ :root { --bg1:#2b1d4e; --bg2:#5b3ba5; --accent:#a385ff; }
+ * { margin:0; padding:0; box-sizing:border-box; }
+ body { height:100dvh; display:flex; flex-direction:column; font-family:"Segoe UI","Noto Sans TC",sans-serif;
+        background:linear-gradient(135deg,var(--bg1),var(--bg2)); }
+ header { display:flex; align-items:center; gap:10px; padding:6px 12px; color:#fff; min-height:48px; }
+ #cheer { font-weight:700; font-size:15px; text-shadow:0 1px 4px rgba(0,0,0,.4); white-space:nowrap; }
+ #deco { overflow:hidden; flex:1; white-space:nowrap; opacity:.85; }
+ #deco span { display:inline-block; animation:float 14s linear infinite; font-size:17px; padding:0 14px; }
+ @keyframes float { from {transform:translateX(0)} to {transform:translateX(-50%)} }
+ #player { display:flex; align-items:center; gap:6px; background:rgba(0,0,0,.25); border-radius:20px; padding:4px 10px; }
+ #player button { background:none; border:none; color:#fff; font-size:16px; cursor:pointer; }
+ #track { font-size:11px; color:#fff; max-width:130px; overflow:hidden; text-overflow:ellipsis; }
+ main { flex:1; padding:0 8px 8px; }
+ iframe { width:100%; height:100%; border:2px solid var(--accent); border-radius:14px; background:#fff;
+          box-shadow:0 0 24px rgba(0,0,0,.35); }
+</style>
+</head>
+<body>
+<header>
+  <div id="cheer"></div>
+  <div id="deco"></div>
+  <div id="player">
+    <button id="prev" title="上一首">⏮</button>
+    <button id="play" title="播放/暫停">▶️</button>
+    <button id="next" title="下一首">⏭</button>
+    <span id="track">🎵 古典音樂</span>
+  </div>
+</header>
+<main><iframe id="chat" allow="camera; microphone; clipboard-write"></iframe></main>
+<script>
+/* ---- theme rotation: next theme on every visit ---- */
+const idx = (parseInt(localStorage.getItem("themeIdx")||"-1",10)+1) % THEMES.length;
+localStorage.setItem("themeIdx", idx);
+const T = THEMES[idx];
+document.documentElement.style.setProperty("--bg1", T.c[0]);
+document.documentElement.style.setProperty("--bg2", T.c[1]);
+document.documentElement.style.setProperty("--accent", T.c[2]);
+document.getElementById("cheer").textContent = `${T.e} 今日應援：${T.n}｜${STUDENT_NAME} 加油！`;
+document.getElementById("deco").innerHTML =
+  "<span>" + Array(14).fill(0).map((_,i)=>T.d[i%T.d.length]).join("　") + "</span>";
+document.getElementById("chat").src = DIFY_URL;
+document.title = `AI 錯題教練 ${T.e}`;
+
+/* ---- ad-free classical player ---- */
+const audio = new Audio(); let ti = Math.floor(Math.random()*PLAYLIST.length); let playing = false;
+function loadTrack(){ audio.src = PLAYLIST[ti][1]; document.getElementById("track").textContent = "🎵 " + PLAYLIST[ti][0]; }
+function toggle(){ playing = !playing; if(playing){ if(!audio.src) loadTrack(); audio.play(); } else audio.pause();
+  document.getElementById("play").textContent = playing ? "⏸" : "▶️"; }
+function step(k){ ti = (ti+k+PLAYLIST.length)%PLAYLIST.length; loadTrack(); if(playing) audio.play(); }
+audio.onended = () => step(1); audio.volume = 0.35;
+document.getElementById("play").onclick = toggle;
+document.getElementById("next").onclick = () => step(1);
+document.getElementById("prev").onclick = () => step(-1);
+
+/* ---- session timing + logout/timeout beacon ---- */
+let sessionStart = Date.now(), sentMs = 0;
+function beacon(final){
+  const mins = Math.round((Date.now() - sessionStart - sentMs*0) / 60000 * 10) / 10;
+  if (mins < 0.5) return;
+  const payload = JSON.stringify({ token: SESSION_TOKEN, student: STUDENT, action: "session_end", minutes: mins });
+  navigator.sendBeacon(API_URL, new Blob([payload], {type:"text/plain"}));
+  if (final) sessionStart = Date.now();
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") beacon(true); });
+window.addEventListener("pagehide", () => beacon(true));
+</script>
+</body>
+</html>
