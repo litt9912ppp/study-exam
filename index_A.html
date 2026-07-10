@@ -96,16 +96,19 @@ document.getElementById("next").onclick = () => step(1);
 document.getElementById("prev").onclick = () => step(-1);
 
 /* ---- session timing + logout/timeout beacon ---- */
-let sessionStart = Date.now(), sentMs = 0;
-function beacon(final){
-  const mins = Math.round((Date.now() - sessionStart - sentMs*0) / 60000 * 10) / 10;
+let sessionStart = Date.now();
+function beacon(){
+  const mins = Math.round((Date.now() - sessionStart) / 60000 * 10) / 10;
+  sessionStart = Date.now();                       // reset so overlapping events don't double-count
   if (mins < 0.5) return;
   const payload = JSON.stringify({ token: SESSION_TOKEN, student: STUDENT, action: "session_end", minutes: mins });
   navigator.sendBeacon(API_URL, new Blob([payload], {type:"text/plain"}));
-  if (final) sessionStart = Date.now();
 }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") beacon(true); });
-window.addEventListener("pagehide", () => beacon(true));
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") beacon();
+  else sessionStart = Date.now();                  // back from background: idle time must not count
+});
+window.addEventListener("pagehide", beacon);
 </script>
 </body>
 </html>
