@@ -4,12 +4,13 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI 錯題教練</title>
 <script>
-/* ================= CONFIG — edit these 5 lines ================= */
+/* ================= CONFIG — edit these 6 lines ================= */
 const DIFY_URL      = "PASTE_YOUR_DIFY_WEBAPP_URL";   // e.g. https://udify.app/chat/xxxx
 const STUDENT       = "B";                             // A = 學測, B = 會考
 const API_URL       = "PASTE_APPS_SCRIPT_EXEC_URL";    // same /exec URL as the chatflow
 const SESSION_TOKEN = "PASTE_SESSION_TOKEN";           // low-privilege token (Apps Script v2 CONFIG)
 const STUDENT_NAME  = "同學";
+const PASSWORD      = "PASTE_B_ACCESS_CODE";           // v5: this page's access code (different per page)
 /* ====== THEMES: swap any group = edit one line (name, emoji, colors[bg1,bg2,accent], deco emojis) ====== */
 const THEMES = [
  {n:"BTS",              e:"💜", c:["#2b1d4e","#5b3ba5","#a385ff"], d:["💜","🐋","✨"]},
@@ -28,7 +29,7 @@ const THEMES = [
  {n:"aespa",            e:"🦋", c:["#0a0a1a","#5f0f9f","#33e1ed"], d:["🦋","💠","🤖"]},
  {n:"LE SSERAFIM",      e:"🔥", c:["#04123d","#1f4ce0","#bfd0ff"], d:["🔥","🦋","🗡️"]}
 ];
-/* ====== MUSIC: files you place in the music/ folder of this repo (see Build Guide v2 Step 9.3) ====== */
+/* ====== MUSIC: files you place in the music/ folder of this repo (see Build Guide v5 Step 8.4) ====== */
 const PLAYLIST = [
  ["巴哈 G弦之歌",        "music/01_bach_air.mp3"],
  ["巴哈 郭德堡變奏曲主題","music/02_bach_goldberg_aria.mp3"],
@@ -56,9 +57,28 @@ const PLAYLIST = [
  main { flex:1; padding:0 8px 8px; }
  iframe { width:100%; height:100%; border:2px solid var(--accent); border-radius:14px; background:#fff;
           box-shadow:0 0 24px rgba(0,0,0,.35); }
+ /* ---- v5 password gate ---- */
+ #gate { position:fixed; inset:0; z-index:9999; display:none; align-items:center; justify-content:center;
+         background:linear-gradient(135deg,var(--bg1),var(--bg2)); }
+ #gatebox { background:rgba(0,0,0,.35); padding:28px 24px; border-radius:16px; text-align:center;
+            border:2px solid var(--accent); box-shadow:0 0 24px rgba(0,0,0,.4); width:min(88vw,320px); }
+ #gatetitle { color:#fff; font-weight:700; font-size:18px; margin-bottom:16px; }
+ #gate input { width:100%; padding:12px; border:none; border-radius:10px; font-size:16px; margin-bottom:12px; }
+ #gate button { width:100%; padding:12px; border:none; border-radius:10px; background:var(--accent);
+                color:#1a1a1a; font-weight:700; font-size:16px; cursor:pointer; }
+ #pwerr { color:#ffd0d0; font-size:13px; min-height:18px; margin-top:6px; }
 </style>
 </head>
 <body>
+<!-- v5 password overlay -->
+<div id="gate">
+  <div id="gatebox">
+    <div id="gatetitle">🔒 AI 錯題教練</div>
+    <input id="pw" type="password" inputmode="text" placeholder="請輸入密碼" autocomplete="off">
+    <button id="pwbtn">進入</button>
+    <div id="pwerr"></div>
+  </div>
+</div>
 <header>
   <div id="cheer"></div>
   <div id="deco"></div>
@@ -81,7 +101,6 @@ document.documentElement.style.setProperty("--accent", T.c[2]);
 document.getElementById("cheer").textContent = `${T.e} 今日應援：${T.n}｜${STUDENT_NAME} 加油！`;
 document.getElementById("deco").innerHTML =
   "<span>" + Array(14).fill(0).map((_,i)=>T.d[i%T.d.length]).join("　") + "</span>";
-document.getElementById("chat").src = DIFY_URL;
 document.title = `AI 錯題教練 ${T.e}`;
 
 /* ---- ad-free classical player ---- */
@@ -109,6 +128,31 @@ document.addEventListener("visibilitychange", () => {
   else sessionStart = Date.now();                  // back from background: idle time must not count
 });
 window.addEventListener("pagehide", beacon);
+
+/* ---- v5 password gate: one-time per device (localStorage) ---- */
+const AUTH_KEY = "auth_" + STUDENT;
+function unlock(){
+  document.getElementById("gate").style.display = "none";
+  document.getElementById("chat").src = DIFY_URL;  // load the chat ONLY after unlock
+  sessionStart = Date.now();                        // start timing when the chat actually opens
+}
+function tryUnlock(){
+  if (document.getElementById("pw").value === PASSWORD){
+    localStorage.setItem(AUTH_KEY, "ok");
+    unlock();
+  } else {
+    document.getElementById("pwerr").textContent = "密碼錯誤，請再試一次";
+    document.getElementById("pw").value = "";
+  }
+}
+if (localStorage.getItem(AUTH_KEY) === "ok"){
+  unlock();                                         // already trusted on this device
+} else {
+  document.getElementById("gate").style.display = "flex";
+  document.getElementById("pwbtn").onclick = tryUnlock;
+  document.getElementById("pw").addEventListener("keydown", e => { if (e.key === "Enter") tryUnlock(); });
+  document.getElementById("pw").focus();
+}
 </script>
 </body>
 </html>
