@@ -95,6 +95,12 @@ const PLAYLIST = [
  #wbtoast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:rgba(0,0,0,.85);
             color:#fff; padding:10px 16px; border-radius:12px; font-size:14px; display:none; z-index:9600;
             max-width:86vw; text-align:center; }
+ /* Wide screens: leave the Dify chat visible on the left (55%) and draw on the right (45%).
+    Narrow screens retain the full-screen board so neither chat nor canvas becomes unusably small. */
+ @media (min-width:900px) {
+   #wb { left:auto; width:45vw; border-left:2px solid rgba(255,255,255,.35); }
+   #wbtoast { left:77.5vw; max-width:40vw; }
+ }
 </style>
 </head>
 <body>
