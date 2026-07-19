@@ -6,11 +6,13 @@
 <script>
 /* ================= CONFIG — edit these 6 lines ================= */
 const DIFY_URL      = "https://udify.app/chatbot/uw9drRnsLlymvyZ0";   // embed path (/chatbot/), not /chat/
-const STUDENT       = "B";                             // A = 學測, B = 會考 
+const STUDENT       = "B";                             // A = 學測, B = 會考
 const API_URL       = "https://script.google.com/macros/s/AKfycbxyQY2Ht4-WRD5oUuAM4M1ZP1Yh73Y5iV7AZXnS2hZ3oSv6eYifr3lDQ-cp5YpsIB6W/exec";    // same /exec URL as the chatflow
 const SESSION_TOKEN = "99F0BE0FCB14681C155E9183A59E622BA4E2674F2EA5F999";           // low-privilege token (Apps Script v2 CONFIG)
 const STUDENT_NAME  = "Emma";
 const PASSWORD      = "Emma0312";           // v5: this page's access code (different per page)
+/* ====== v6 MENU: first-screen buttons. Edit SUBJECTS to add/remove a subject ====== */
+const SUBJECTS = ["國文","英文","數學","社會","自然"];
 /* ====== THEMES: swap any group = edit one line (name, emoji, colors[bg1,bg2,accent], deco emojis) ====== */
 const THEMES = [
  {n:"BTS",              e:"💜", c:["#2b1d4e","#5b3ba5","#a385ff"], d:["💜","🐋","✨"]},
@@ -67,6 +69,32 @@ const PLAYLIST = [
  #gate button { width:100%; padding:12px; border:none; border-radius:10px; background:var(--accent);
                 color:#1a1a1a; font-weight:700; font-size:16px; cursor:pointer; }
  #pwerr { color:#ffd0d0; font-size:13px; min-height:18px; margin-top:6px; }
+ /* ---- v6 menu screen ---- */
+ #menu { position:fixed; inset:0; z-index:9000; display:none; align-items:center; justify-content:center;
+         background:linear-gradient(135deg,var(--bg1),var(--bg2)); overflow:auto; }
+ #menubox { width:min(94vw,560px); padding:24px 18px; text-align:center; }
+ #menutitle { color:#fff; font-weight:700; font-size:22px; margin-bottom:18px; text-shadow:0 1px 4px rgba(0,0,0,.4); }
+ .mgroup { background:rgba(0,0,0,.25); border:2px solid var(--accent); border-radius:16px;
+           padding:14px; margin-bottom:16px; box-shadow:0 0 24px rgba(0,0,0,.35); }
+ .mgroup h2 { color:#fff; font-size:16px; margin-bottom:10px; }
+ .mgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; }
+ .mgrid button { padding:14px 8px; border:none; border-radius:12px; background:var(--accent); color:#1a1a1a;
+                 font-weight:700; font-size:16px; cursor:pointer; font-family:inherit; }
+ .mgrid button:active { transform:scale(.96); }
+ #homebtn, #wbbtn { display:none; background:rgba(0,0,0,.25); border:none; color:#fff; font-size:15px;
+            border-radius:20px; padding:4px 12px; cursor:pointer; }
+ /* ---- v6.2 whiteboard ---- */
+ #wb { position:fixed; inset:0; z-index:9500; display:none; flex-direction:column; background:rgba(0,0,0,.55); }
+ #wbbar { display:flex; gap:8px; align-items:center; padding:8px 10px; flex-wrap:wrap; }
+ #wbbar button { border:none; border-radius:10px; padding:8px 12px; font-size:15px; font-weight:700;
+                 background:var(--accent); color:#1a1a1a; cursor:pointer; font-family:inherit; }
+ #wbbar button.tool.active { outline:3px solid #fff; }
+ #wbbar .spacer { flex:1; }
+ #wbwrap { flex:1; margin:0 10px 10px; }
+ #wbcanvas { width:100%; height:100%; background:#fff; border-radius:12px; touch-action:none; display:block; }
+ #wbtoast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:rgba(0,0,0,.85);
+            color:#fff; padding:10px 16px; border-radius:12px; font-size:14px; display:none; z-index:9600;
+            max-width:86vw; text-align:center; }
 </style>
 </head>
 <body>
@@ -79,7 +107,32 @@ const PLAYLIST = [
     <div id="pwerr"></div>
   </div>
 </div>
+<!-- v6 menu screen (shows after password, before chat) -->
+<div id="menu">
+  <div id="menubox">
+    <div id="menutitle">今天要做什麼？</div>
+    <div class="mgroup"><h2>📥 匯入錯題（拍照或貼題目）</h2><div class="mgrid" id="grid-import"></div></div>
+    <div class="mgroup"><h2>📖 複習</h2><div class="mgrid" id="grid-review"></div></div>
+  </div>
+</div>
+<!-- v6.2 whiteboard overlay -->
+<div id="wb">
+  <div id="wbbar">
+    <button id="wbpen" class="tool active">✏️ 筆</button>
+    <button id="wberase" class="tool">🧽 橡皮擦</button>
+    <button id="wbundo">↩️ 復原</button>
+    <button id="wbclear">🗑️ 清空</button>
+    <span class="spacer"></span>
+    <button id="wbcopy">📋 複製</button>
+    <button id="wbshare">📤 儲存/分享</button>
+    <button id="wbclose">✖ 關閉</button>
+  </div>
+  <div id="wbwrap"><canvas id="wbcanvas"></canvas></div>
+</div>
+<div id="wbtoast"></div>
 <header>
+  <button id="homebtn" title="回選單">🏠 選單</button>
+  <button id="wbbtn" title="手寫白板">✏️ 白板</button>
   <div id="cheer"></div>
   <div id="deco"></div>
   <div id="player">
@@ -129,12 +182,118 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("pagehide", beacon);
 
+/* ---- v6 menu: buttons pre-fill the Dify start form via URL params ----
+   Dify expects each input value GZIP-compressed then base64-encoded (same as its embed.js). */
+async function gz64(s){
+  const stream = new Blob([s]).stream().pipeThrough(new CompressionStream("gzip"));
+  const buf = await new Response(stream).arrayBuffer();
+  let bin = ""; new Uint8Array(buf).forEach(b => bin += String.fromCharCode(b));
+  return encodeURIComponent(btoa(bin));
+}
+async function openChat(action, subject){
+  let url = DIFY_URL;
+  try { url += "?action=" + await gz64(action) + "&subject=" + await gz64(subject); }
+  catch(e){ /* very old browser: open without pre-fill, form still works manually */ }
+  document.getElementById("menu").style.display = "none";
+  document.getElementById("homebtn").style.display = "inline-block";
+  document.getElementById("wbbtn").style.display = "inline-block";   // v6.2: whiteboard available while chatting
+  document.getElementById("chat").src = url;
+  sessionStart = Date.now();                        // start timing when the chat actually opens
+}
+function buildMenu(){
+  const gi = document.getElementById("grid-import"), gr = document.getElementById("grid-review");
+  SUBJECTS.forEach(s => {
+    const bi = document.createElement("button"); bi.textContent = "匯入" + s + "題";
+    bi.onclick = () => openChat("匯入錯題", s); gi.appendChild(bi);
+    const br = document.createElement("button"); br.textContent = "複習" + s;
+    br.onclick = () => openChat("複習", s); gr.appendChild(br);
+  });
+}
+buildMenu();
+document.getElementById("homebtn").onclick = () => {
+  document.getElementById("chat").src = "";          // unload chat; picking a button reloads it fresh
+  document.getElementById("homebtn").style.display = "none";
+  document.getElementById("wbbtn").style.display = "none";
+  document.getElementById("wb").style.display = "none";
+  document.getElementById("menu").style.display = "flex";
+};
+
+/* ---- v6.2 whiteboard: draw → 複製 (paste in chat) or 儲存/分享 (Photos → 📎) ----
+   The Dify iframe is cross-origin, so the drawing can't be injected directly;
+   the student pastes it or attaches it — the coach's Vision reads it like any photo. */
+const wb = document.getElementById("wb"), wbc = document.getElementById("wbcanvas"), wbx = wbc.getContext("2d");
+let wbStrokes = [], wbCur = null, wbTool = "pen", wbDrawing = false;
+function wbResize(){
+  const r = wbc.parentElement.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  wbc.width = Math.round(r.width * d); wbc.height = Math.round(r.height * d);
+  wbx.setTransform(d, 0, 0, d, 0, 0); wbRedraw();
+}
+function wbRedraw(){
+  wbx.save(); wbx.setTransform(1,0,0,1,0,0);
+  wbx.fillStyle = "#fff"; wbx.fillRect(0, 0, wbc.width, wbc.height); wbx.restore();
+  wbStrokes.forEach(s => {
+    wbx.strokeStyle = s.c; wbx.lineWidth = s.w; wbx.lineCap = wbx.lineJoin = "round";
+    wbx.beginPath();
+    s.p.forEach((pt, i) => i ? wbx.lineTo(pt[0], pt[1]) : wbx.moveTo(pt[0], pt[1]));
+    if (s.p.length === 1) wbx.lineTo(s.p[0][0] + .1, s.p[0][1]);   // a dot
+    wbx.stroke();
+  });
+}
+function wbPos(e){ const r = wbc.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+wbc.addEventListener("pointerdown", e => {
+  e.preventDefault(); wbc.setPointerCapture(e.pointerId); wbDrawing = true;
+  wbCur = { c: wbTool === "pen" ? "#111" : "#fff", w: wbTool === "pen" ? 3 : 26, p: [wbPos(e)] };
+  wbStrokes.push(wbCur); wbRedraw();
+});
+wbc.addEventListener("pointermove", e => {
+  if (!wbDrawing) return;
+  const p = wbPos(e), last = wbCur.p[wbCur.p.length - 1];
+  wbCur.p.push(p);
+  wbx.strokeStyle = wbCur.c; wbx.lineWidth = wbCur.w; wbx.lineCap = wbx.lineJoin = "round";
+  wbx.beginPath(); wbx.moveTo(last[0], last[1]); wbx.lineTo(p[0], p[1]); wbx.stroke();
+});
+["pointerup", "pointercancel"].forEach(ev => wbc.addEventListener(ev, () => { wbDrawing = false; wbCur = null; }));
+function wbSetTool(t){
+  wbTool = t;
+  document.getElementById("wbpen").classList.toggle("active", t === "pen");
+  document.getElementById("wberase").classList.toggle("active", t === "erase");
+}
+function wbToast(msg){
+  const t = document.getElementById("wbtoast"); t.textContent = msg; t.style.display = "block";
+  clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", 3200);
+}
+function wbBlob(){ return new Promise(res => wbc.toBlob(res, "image/png")); }
+document.getElementById("wbpen").onclick = () => wbSetTool("pen");
+document.getElementById("wberase").onclick = () => wbSetTool("erase");
+document.getElementById("wbundo").onclick = () => { wbStrokes.pop(); wbRedraw(); };
+document.getElementById("wbclear").onclick = () => { wbStrokes = []; wbRedraw(); };
+document.getElementById("wbclose").onclick = () => { wb.style.display = "none"; };
+document.getElementById("wbbtn").onclick = () => { wb.style.display = "flex"; requestAnimationFrame(wbResize); };
+window.addEventListener("resize", () => { if (wb.style.display === "flex") wbResize(); });
+document.getElementById("wbcopy").onclick = async () => {
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": wbBlob() })]);
+    wbToast("已複製！關閉白板後，長按對話輸入框選「貼上」");
+  } catch (e) { wbToast("這台裝置不支援複製圖片，請改用「儲存/分享」"); }
+};
+document.getElementById("wbshare").onclick = async () => {
+  const blob = await wbBlob();
+  const file = new File([blob], "whiteboard.png", { type: "image/png" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); wbToast("儲存到照片後，用對話框的 📎 上傳"); }
+    catch (e) { /* user cancelled the share sheet */ }
+  } else {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = "whiteboard.png"; a.click();
+    URL.revokeObjectURL(a.href); wbToast("已下載！用對話框的 📎 上傳");
+  }
+};
+
 /* ---- v5 password gate: one-time per device (localStorage) ---- */
 const AUTH_KEY = "auth_" + STUDENT;
 function unlock(){
   document.getElementById("gate").style.display = "none";
-  document.getElementById("chat").src = DIFY_URL;  // load the chat ONLY after unlock
-  sessionStart = Date.now();                        // start timing when the chat actually opens
+  document.getElementById("menu").style.display = "flex";   // v6: show the button menu, not the chat
 }
 function tryUnlock(){
   if (document.getElementById("pw").value === PASSWORD){
